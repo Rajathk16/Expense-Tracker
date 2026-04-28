@@ -1,6 +1,9 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  /* config options here */
+  // Ensure PostCSS is enabled
+  experimental: {
+    // This might help with Tailwind v4
+  },
 };
 
 export default nextConfig;

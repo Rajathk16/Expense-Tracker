@@ -18,6 +18,11 @@ app.use (express.json())
 app.get('/', (req, res) => {
     res.send("<h1>hello from server</h1>");
 })
+
+// Expense routes
+const expenseRoutes = require('./routes/expenseRoutes');
+app.use('/api/expenses', expenseRoutes);
+
 //port
 const PORT=8080||process.env.PORT
 //listen server

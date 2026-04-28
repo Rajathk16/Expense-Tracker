@@ -66,7 +66,7 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-8">
           <div className="flex items-center justify-between mb-6">
             <h2 className="text-xl font-semibold text-gray-900">Recent Expenses</h2>
-            <Button className="shadow-md">View All</Button>
+            <Button onClick={() => router.push('/expenses')} className="shadow-md">View All</Button>
           </div>
           <div className="text-center py-12">
             <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -74,7 +74,7 @@ export default function Dashboard() {
             </svg>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No expenses yet</h3>
             <p className="text-gray-500 mb-6">Start tracking your expenses to see them here.</p>
-            <Button className="shadow-md">Add Your First Expense</Button>
+            <Button onClick={() => router.push('/add-expense')} className="shadow-md">Add Your First Expense</Button>
           </div>
         </div>
       </div>
