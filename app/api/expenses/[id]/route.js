@@ -19,7 +19,7 @@ export async function PATCH(request, { params }) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
     const { amount, category, description, date } = await request.json();
 
     const expense = await Expense.findOne({ _id: id, user: user._id });
@@ -56,7 +56,7 @@ export async function DELETE(request, { params }) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
 
-    const { id } = params;
+    const { id } = await params;
 
     const expense = await Expense.findOneAndDelete({ _id: id, user: user._id });
     if (!expense) {

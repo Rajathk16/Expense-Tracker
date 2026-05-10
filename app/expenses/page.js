@@ -3,7 +3,19 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
-import Button from '../../components/Button';
+import Input from '../../components/Input';
+
+const CATEGORIES = [
+  'Food & Dining','Transportation','Shopping','Entertainment',
+  'Bills & Utilities','Healthcare','Education','Travel','Other',
+];
+const CAT_ICON = {
+  'Food & Dining':'🍔','Transportation':'🚗','Shopping':'🛍️','Entertainment':'🎬',
+  'Bills & Utilities':'⚡','Healthcare':'🏥','Education':'📚','Travel':'✈️','Other':'📦',
+};
+
+const fmt = (v) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v || 0);
+const fmtDate = (s) => new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 
 export default function Expenses() {
   const router = useRouter();
@@ -11,39 +23,65 @@ export default function Expenses() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('all');
-  const [editingExpense, setEditingExpense] = useState(null);
-  const [editForm, setEditForm] = useState({
-    amount: '',
-    category: '',
-    description: '',
-    date: '',
-  });
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({ amount: '', category: '', description: '', date: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState(null);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    router.push('/');
+  const handleLogout = () => { localStorage.removeItem('user'); router.push('/'); };
+
+  const getToken = () => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user'));
+      return u?.token || null;
+    } catch { return null; }
   };
 
-  const handleEdit = (expense) => {
-    setEditingExpense(expense._id);
+  const loadExpenses = async (cat) => {
+    setLoading(true);
+    setError('');
+    try {
+      const token = getToken();
+      if (!token) { router.push('/auth/login'); return; }
+      const url = (cat || filter) === 'all'
+        ? '/api/expenses/all'
+        : `/api/expenses/category/${(cat || filter).replace(/\s+/g, '-')}`;
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) {
+        setExpenses(await res.json());
+      } else {
+        setError('Failed to load expenses.');
+      }
+    } catch { setError('Network error.'); }
+    finally { setLoading(false); }
+  };
+
+  useEffect(() => { loadExpenses(filter); }, [filter]);
+
+  const startEdit = (exp) => {
+    setEditingId(exp._id);
     setEditForm({
-      amount: expense.amount,
-      category: expense.category,
-      description: expense.description,
-      date: new Date(expense.date).toISOString().split('T')[0],
+      amount: String(exp.amount),
+      category: exp.category,
+      description: exp.description,
+      date: new Date(exp.date).toISOString().split('T')[0],
     });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({ amount: '', category: '', description: '', date: '' });
   };
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
+    setEditSaving(true);
+    setError('');
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      const response = await fetch(`/api/expenses/${editingExpense}`, {
+      const token = getToken();
+      const res = await fetch(`/api/expenses/${editingId}`, {
         method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({
           amount: parseFloat(editForm.amount),
           category: editForm.category,
@@ -51,269 +89,212 @@ export default function Expenses() {
           date: editForm.date,
         }),
       });
-
-      if (response.ok) {
-        setEditingExpense(null);
-        // Reload expenses
-        window.location.reload();
+      if (res.ok) {
+        // Update state directly — no page reload
+        setExpenses(prev => prev.map(exp =>
+          exp._id === editingId
+            ? { ...exp, amount: parseFloat(editForm.amount), category: editForm.category, description: editForm.description, date: editForm.date }
+            : exp
+        ));
+        cancelEdit();
       } else {
-        const data = await response.json();
-        setError(data.message || 'Failed to update expense');
+        const d = await res.json();
+        setError(d.message || 'Failed to update expense.');
       }
-    } catch (error) {
-      setError('Network error. Please try again.');
-    }
+    } catch { setError('Network error.'); }
+    finally { setEditSaving(false); }
   };
 
-  const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this expense?')) return;
+  const handleDelete = async () => {
+    setError('');
     try {
-      const user = JSON.parse(localStorage.getItem('user'));
-      const response = await fetch(`/api/expenses/${id}`, {
+      const token = getToken();
+      const res = await fetch(`/api/expenses/${deleteId}`, {
         method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
+        headers: { Authorization: `Bearer ${token}` },
       });
-
-      if (response.ok) {
-        setExpenses(expenses.filter(exp => exp._id !== id));
+      if (res.ok) {
+        setExpenses(prev => prev.filter(e => e._id !== deleteId));
+        setDeleteId(null);
       } else {
-        setError('Failed to delete expense');
+        const d = await res.json();
+        setError(d.message || 'Failed to delete expense.');
+        setDeleteId(null);
       }
-    } catch (error) {
-      setError('Network error. Please try again.');
+    } catch {
+      setError('Network error.');
+      setDeleteId(null);
     }
   };
 
-  useEffect(() => {
-    const loadExpenses = async () => {
-      try {
-        const user = JSON.parse(localStorage.getItem('user'));
-        if (!user || !user.token) {
-          router.push('/auth/login');
-          return;
-        }
+  const total = expenses.reduce((s, e) => s + Number(e.amount), 0);
 
-        const url = filter === 'all' ? '/api/expenses/all' : `/api/expenses/category/${filter.replace(/\s+/g, '-')}`;
-        const response = await fetch(url, {
-          headers: {
-            Authorization: `Bearer ${user.token}`,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setExpenses(data);
-        } else {
-          setError('Failed to fetch expenses');
-        }
-      } catch (error) {
-        setError('Network error. Please try again.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadExpenses();
-  }, [filter, router]);
-
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const formatAmount = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(amount);
-  };
-
-  const categories = [
-    'Food & Dining',
-    'Transportation',
-    'Shopping',
-    'Entertainment',
-    'Bills & Utilities',
-    'Healthcare',
-    'Education',
-    'Travel',
-    'Other'
-  ];
-
-  const totalAmount = expenses.reduce((sum, expense) => sum + expense.amount, 0);
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar onLogout={handleLogout} />
-        <div className="container mx-auto px-4 py-8 max-w-4xl">
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-gray-500 mt-4">Loading expenses...</p>
-          </div>
-        </div>
+  if (loading) return (
+    <div style={{ minHeight: '100vh', background: '#f9fafb' }}>
+      <Navbar onLogout={handleLogout} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 60px)', gap: '0.75rem', flexDirection: 'column' }}>
+        <div className="spinner" /><p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Loading...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={{ minHeight: '100vh', background: '#f9fafb' }}>
       <Navbar onLogout={handleLogout} />
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-8">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">All Expenses</h1>
-              <p className="text-gray-600">View and manage all your expenses.</p>
-            </div>
-            <Button onClick={() => router.push('/add-expense')} className="shadow-md">
-              Add Expense
-            </Button>
-          </div>
 
-          <div className="flex items-center gap-4 mb-6">
-            <label htmlFor="filter" className="text-sm font-medium text-gray-700">
-              Filter by category:
-            </label>
-            <select
-              id="filter"
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="all">All Categories</option>
-              {categories.map(category => (
-                <option key={category} value={category}>{category}</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-100">
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-semibold text-gray-900">
-                Total: {formatAmount(totalAmount)}
-              </span>
-              <span className="text-sm text-gray-500">
-                {expenses.length} expense{expenses.length !== 1 ? 's' : ''}
-              </span>
+      {/* Delete confirm modal */}
+      {deleteId && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 200, background: 'rgba(0,0,0,0.35)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem'
+        }}>
+          <div className="card" style={{ maxWidth: '360px', width: '100%' }}>
+            <h3 style={{ fontWeight: 600, color: '#111827', marginBottom: '0.4rem' }}>Delete this expense?</h3>
+            <p style={{ fontSize: '0.875rem', color: '#6b7280', marginBottom: '1.25rem' }}>This action cannot be undone.</p>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setDeleteId(null)}>Cancel</button>
+              <button className="btn btn-danger" style={{ flex: 1 }} onClick={handleDelete}>Delete</button>
             </div>
           </div>
         </div>
+      )}
 
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6">
-            {error}
+      <div className="page-inner">
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#111827' }}>All Expenses</h1>
+            <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.2rem' }}>Manage and review your transactions</p>
           </div>
-        )}
+          <button className="btn btn-primary btn-sm" onClick={() => router.push('/add-expense')}>+ Add Expense</button>
+        </div>
 
-        <div className="bg-white rounded-xl shadow-md border border-gray-100">
+        {/* Filter + summary bar */}
+        <div className="card" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem', padding: '0.85rem 1.25rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <label style={{ fontSize: '0.82rem', color: '#374151', fontWeight: 500 }}>Category:</label>
+            <select
+              value={filter}
+              onChange={e => setFilter(e.target.value)}
+              className="form-input"
+              style={{ width: 'auto', height: '36px', fontSize: '0.82rem' }}
+            >
+              <option value="all">All</option>
+              {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{ fontSize: '0.875rem', color: '#374151' }}>
+            <span style={{ fontWeight: 600, color: '#dc2626' }}>{fmt(total)}</span>
+            <span style={{ color: '#9ca3af', marginLeft: '0.4rem' }}>· {expenses.length} record{expenses.length !== 1 ? 's' : ''}</span>
+          </div>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        {/* List */}
+        <div className="card card-flush">
           {expenses.length === 0 ? (
-            <div className="text-center py-12">
-              <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No expenses found</h3>
-              <p className="text-gray-500 mb-6">
-                {filter === 'all' ? 'You haven\'t added any expenses yet.' : `No expenses found in ${filter} category.`}
+            <div style={{ textAlign: 'center', padding: '3.5rem 1rem' }}>
+              <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '1rem' }}>
+                {filter === 'all' ? 'No expenses yet.' : `No expenses in "${filter}".`}
               </p>
-              <Button onClick={() => router.push('/add-expense')} className="shadow-md">
-                Add Your First Expense
-              </Button>
+              {filter === 'all' && (
+                <button className="btn btn-primary btn-sm" onClick={() => router.push('/add-expense')}>+ Add First Expense</button>
+              )}
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
-              {expenses.map((expense) => (
-                <div key={expense._id} className="p-6 hover:bg-gray-50">
-                  {editingExpense === expense._id ? (
-                    <form onSubmit={handleEditSubmit} className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Input
-                          label="Amount"
-                          name="amount"
-                          type="number"
-                          step="0.01"
-                          value={editForm.amount}
-                          onChange={(e) => setEditForm(prev => ({ ...prev, amount: e.target.value }))}
-                          required
-                        />
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+            expenses.map((exp) => {
+              const isEditing = editingId === exp._id;
+              return (
+                <div key={exp._id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  {isEditing ? (
+                    /* Inline edit form */
+                    <form onSubmit={handleEditSubmit} style={{ padding: '1rem 1.25rem', background: '#eff6ff', borderLeft: '3px solid #3b82f6' }}>
+                      <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#2563eb', marginBottom: '0.85rem' }}>Editing expense</div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '0.75rem' }}>
+                        <div className="form-group">
+                          <label className="form-label">Amount (₹)</label>
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editForm.amount}
+                            onChange={e => setEditForm(p => ({ ...p, amount: e.target.value }))}
+                            className="form-input"
+                            required
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Category</label>
                           <select
-                            name="category"
                             value={editForm.category}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, category: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            onChange={e => setEditForm(p => ({ ...p, category: e.target.value }))}
+                            className="form-input"
                             required
                           >
-                            {categories.map(cat => (
-                              <option key={cat} value={cat}>{cat}</option>
-                            ))}
+                            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
                           </select>
                         </div>
+                        <div className="form-group">
+                          <label className="form-label">Description</label>
+                          <input
+                            type="text"
+                            value={editForm.description}
+                            onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))}
+                            className="form-input"
+                            required
+                          />
+                        </div>
+                        <div className="form-group">
+                          <label className="form-label">Date</label>
+                          <input
+                            type="date"
+                            value={editForm.date}
+                            onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))}
+                            className="form-input"
+                            required
+                          />
+                        </div>
                       </div>
-                      <Input
-                        label="Description"
-                        name="description"
-                        value={editForm.description}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                        required
-                      />
-                      <Input
-                        label="Date"
-                        name="date"
-                        type="date"
-                        value={editForm.date}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, date: e.target.value }))}
-                        required
-                      />
-                      <div className="flex gap-2">
-                        <Button type="submit" className="bg-green-600 hover:bg-green-700">
-                          Save
-                        </Button>
-                        <Button type="button" onClick={() => setEditingExpense(null)} className="bg-gray-600 hover:bg-gray-700">
-                          Cancel
-                        </Button>
+                      <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                        <button type="submit" disabled={editSaving} className="btn btn-primary btn-sm">
+                          {editSaving ? 'Saving...' : 'Save'}
+                        </button>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={cancelEdit}>Cancel</button>
                       </div>
                     </form>
                   ) : (
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-4">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-medium text-gray-900">
-                              {expense.description}
-                            </h3>
-                            <p className="text-sm text-gray-500">
-                              {expense.category} • {formatDate(expense.date)}
-                            </p>
+                    <div className="list-row">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1, minWidth: 0 }}>
+                        <div className="cat-pill" style={{ background: '#f3f4f6' }}>{CAT_ICON[exp.category] || '💸'}</div>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: '0.875rem', fontWeight: 500, color: '#111827', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {exp.description}
                           </div>
-                          <div className="text-right">
-                            <p className="text-xl font-bold text-red-600">
-                              -{formatAmount(expense.amount)}
-                            </p>
+                          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.1rem' }}>
+                            {exp.category} · {fmtDate(exp.date)}
                           </div>
                         </div>
                       </div>
-                      <div className="flex gap-2 ml-4">
-                        <Button onClick={() => handleEdit(expense)} className="bg-blue-600 hover:bg-blue-700 text-sm px-3 py-1">
-                          Edit
-                        </Button>
-                        <Button onClick={() => handleDelete(expense._id)} className="bg-red-600 hover:bg-red-700 text-sm px-3 py-1">
-                          Delete
-                        </Button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flexShrink: 0 }}>
+                        <span style={{ fontWeight: 600, color: '#dc2626', fontSize: '0.9rem' }}>-{fmt(exp.amount)}</span>
+                        <div style={{ display: 'flex', gap: '0.4rem' }}>
+                          <button className="btn btn-secondary btn-sm" onClick={() => startEdit(exp)}>Edit</button>
+                          <button className="btn btn-danger btn-sm" onClick={() => setDeleteId(exp._id)}>Delete</button>
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              );
+            })
           )}
         </div>
+
+        {expenses.length > 0 && (
+          <p style={{ fontSize: '0.78rem', color: '#9ca3af', marginTop: '0.75rem', textAlign: 'right' }}>
+            {expenses.length} result{expenses.length !== 1 ? 's' : ''}{filter !== 'all' ? ` in "${filter}"` : ''}
+          </p>
+        )}
       </div>
     </div>
   );

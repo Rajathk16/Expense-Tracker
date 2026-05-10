@@ -2,106 +2,114 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Button from '../../../components/Button';
 import Input from '../../../components/Input';
 
 export default function Login() {
-  const [formData, setFormData] = useState({
-    email: '',
-    password: ''
-  });
+  const [formData, setFormData] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
     if (error) setError('');
   };
-
-  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     try {
-      const response = await fetch('/api/auth/login', {
+      const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: formData.email,
-          password: formData.password,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData),
       });
-
-      const data = await response.json();
-      if (!response.ok) {
-        setError(data.message || 'Invalid email or password');
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'Invalid email or password.');
       } else {
         localStorage.setItem('user', JSON.stringify(data));
         router.push('/dashboard');
       }
-    } catch (error) {
-      setError('Unable to reach the server. Please try again.');
+    } catch {
+      setError('Unable to connect. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-linear-to-br from-purple-50 to-pink-50 flex items-center justify-center px-4">
-      <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow-lg w-full max-w-md border border-gray-100">
-        <div className="text-center mb-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h2>
-          <p className="text-gray-600">Sign in to your account</p>
-        </div>
-        
-        {error && (
-          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-            <p className="text-red-600 text-sm">{error}</p>
+    <div style={{
+      minHeight: '100vh',
+      background: '#f9fafb',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '1.5rem',
+    }}>
+      <div style={{ width: '100%', maxWidth: '380px' }}>
+        {/* Logo */}
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/>
+            </svg>
+            <span style={{ fontWeight: 700, fontSize: '1.15rem', color: '#111827' }}>SpendSmart</span>
           </div>
-        )}
-        
-        <Input
-          label="Email Address"
-          type="email"
-          name="email"
-          placeholder="Enter your email"
-          value={formData.email}
-          onChange={handleChange}
-        />
-        
-        <Input
-          label="Password"
-          type="password"
-          name="password"
-          placeholder="Enter your password"
-          value={formData.password}
-          onChange={handleChange}
-        />
-        
-        <Button type="submit" className="w-full text-lg py-3 shadow-md hover:shadow-lg" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign In'}
-        </Button>
-        
-        <p className="text-center mt-6 text-gray-600">
-          Don&apos;t have an account?{' '}
-          <button
-            type="button"
-            onClick={() => router.push('/auth/signup')}
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
-            Sign up
-          </button>
-        </p>
-      </form>
+          <h1 style={{ fontSize: '1.35rem', fontWeight: 600, color: '#111827', marginBottom: '0.25rem' }}>Sign in</h1>
+          <p style={{ fontSize: '0.875rem', color: '#6b7280' }}>Enter your credentials to continue</p>
+        </div>
+
+        {/* Form card */}
+        <div className="card">
+          {error && <div className="alert alert-error">{error}</div>}
+
+          <form onSubmit={handleSubmit}>
+            <Input
+              label="Email"
+              type="email"
+              name="email"
+              placeholder="you@example.com"
+              value={formData.email}
+              onChange={handleChange}
+              required
+            />
+            <Input
+              label="Password"
+              type="password"
+              name="password"
+              placeholder="••••••••"
+              value={formData.password}
+              onChange={handleChange}
+              required
+            />
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="btn btn-primary btn-full"
+              style={{ marginTop: '0.25rem' }}
+            >
+              {loading ? 'Signing in...' : 'Sign In'}
+            </button>
+          </form>
+
+          <div className="divider" />
+
+          <p style={{ textAlign: 'center', fontSize: '0.875rem', color: '#6b7280' }}>
+            Don&apos;t have an account?{' '}
+            <button
+              type="button"
+              onClick={() => router.push('/auth/signup')}
+              style={{ color: '#2563eb', fontWeight: 500, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: 'inherit' }}
+            >
+              Create one
+            </button>
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

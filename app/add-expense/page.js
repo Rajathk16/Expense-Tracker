@@ -3,51 +3,42 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
-import Button from '../../components/Button';
 import Input from '../../components/Input';
+
+const CATEGORIES = [
+  'Food & Dining','Transportation','Shopping','Entertainment',
+  'Bills & Utilities','Healthcare','Education','Travel','Other',
+];
 
 export default function AddExpense() {
   const router = useRouter();
   const [formData, setFormData] = useState({
-    amount: '',
-    category: '',
-    description: '',
-    date: new Date().toISOString().split('T')[0], // Today's date in YYYY-MM-DD format
+    amount: '', category: '', description: '',
+    date: new Date().toISOString().split('T')[0],
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    router.push('/');
-  };
+  const handleLogout = () => { localStorage.removeItem('user'); router.push('/'); };
 
-  const handleInputChange = (e) => {
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
+    if (error) setError('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-
     try {
       const user = JSON.parse(localStorage.getItem('user'));
-      if (!user || !user.token) {
-        router.push('/auth/login');
-        return;
-      }
+      if (!user?.token) { router.push('/auth/login'); return; }
 
-      const response = await fetch('/api/expenses/add', {
+      const res = await fetch('/api/expenses/add', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
         body: JSON.stringify({
           amount: parseFloat(formData.amount),
           category: formData.category,
@@ -56,131 +47,110 @@ export default function AddExpense() {
         }),
       });
 
-      if (response.ok) {
-        router.push('/dashboard');
+      if (res.ok) {
+        setSuccess(true);
+        setTimeout(() => router.push('/dashboard'), 1000);
       } else {
-        const data = await response.json();
-        setError(data.message || 'Failed to add expense');
+        const data = await res.json();
+        setError(data.message || 'Failed to add expense.');
       }
-    } catch (error) {
+    } catch {
       setError('Network error. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
-  const categories = [
-    'Food & Dining',
-    'Transportation',
-    'Shopping',
-    'Entertainment',
-    'Bills & Utilities',
-    'Healthcare',
-    'Education',
-    'Travel',
-    'Other'
-  ];
-
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={{ minHeight: '100vh', background: '#f9fafb' }}>
       <Navbar onLogout={handleLogout} />
-      <div className="container mx-auto px-4 py-8 max-w-2xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Add Expense</h1>
-          <p className="text-gray-600">Track your spending by adding a new expense.</p>
+      <div className="page-inner-sm">
+
+        {/* Header */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <button
+            onClick={() => router.back()}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#6b7280', fontSize: '0.82rem', background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: '0.75rem' }}
+          >
+            ← Back
+          </button>
+          <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#111827' }}>Add Expense</h1>
+          <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.2rem' }}>Record a new spending item.</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-                {error}
-              </div>
-            )}
+        <div className="card">
+          {success && <div className="alert alert-success">Expense added! Redirecting...</div>}
+          {error && <div className="alert alert-error">{error}</div>}
 
-            <div>
-              <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-2">
-                Amount (₹)
-              </label>
-              <Input
-                type="number"
+          <form onSubmit={handleSubmit}>
+            {/* Amount */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="amount">Amount (₹)</label>
+              <input
                 id="amount"
                 name="amount"
-                value={formData.amount}
-                onChange={handleInputChange}
-                placeholder="0.00"
+                type="number"
                 step="0.01"
                 min="0"
+                placeholder="0.00"
+                value={formData.amount}
+                onChange={handleChange}
                 required
-                className="w-full"
+                className="form-input"
               />
             </div>
 
-            <div>
-              <label htmlFor="category" className="block text-sm font-medium text-gray-700 mb-2">
-                Category
-              </label>
+            {/* Category */}
+            <div className="form-group">
+              <label className="form-label" htmlFor="category">Category</label>
               <select
                 id="category"
                 name="category"
                 value={formData.category}
-                onChange={handleInputChange}
+                onChange={handleChange}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="form-input"
               >
-                <option value="">Select a category</option>
-                {categories.map(category => (
-                  <option key={category} value={category}>{category}</option>
-                ))}
+                <option value="">Select category</option>
+                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 
-            <div>
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-2">
-                Description
-              </label>
-              <Input
-                type="text"
-                id="description"
-                name="description"
-                value={formData.description}
-                onChange={handleInputChange}
-                placeholder="What did you spend on?"
-                required
-                className="w-full"
-              />
-            </div>
+            <Input
+              label="Description"
+              name="description"
+              placeholder="e.g. Dinner at restaurant"
+              value={formData.description}
+              onChange={handleChange}
+              required
+            />
 
-            <div>
-              <label htmlFor="date" className="block text-sm font-medium text-gray-700 mb-2">
-                Date
-              </label>
-              <Input
-                type="date"
-                id="date"
-                name="date"
-                value={formData.date}
-                onChange={handleInputChange}
-                required
-                className="w-full"
-              />
-            </div>
+            <Input
+              label="Date"
+              type="date"
+              name="date"
+              value={formData.date}
+              onChange={handleChange}
+              required
+            />
 
-            <div className="flex gap-4">
-              <Button
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+              <button
                 type="button"
+                className="btn btn-secondary"
+                style={{ flex: 1 }}
                 onClick={() => router.push('/dashboard')}
-                className="flex-1 bg-gray-500 hover:bg-gray-600"
               >
                 Cancel
-              </Button>
-              <Button
+              </button>
+              <button
                 type="submit"
-                disabled={loading}
-                className="flex-1"
+                disabled={loading || success}
+                className="btn btn-primary"
+                style={{ flex: 2 }}
               >
-                {loading ? 'Adding...' : 'Add Expense'}
-              </Button>
+                {loading ? 'Saving...' : 'Save Expense'}
+              </button>
             </div>
           </form>
         </div>

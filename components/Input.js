@@ -1,24 +1,39 @@
 import React from 'react';
 
-const Input = ({ type = 'text', placeholder, value, onChange, className = '', label, error, ...props }) => {
+const Input = ({
+  type = 'text',
+  placeholder,
+  value,
+  onChange,
+  className = '',
+  label,
+  error,
+  hint,
+  name,
+  id,
+  ...props
+}) => {
+  const inputId = id || name;
+
   return (
-    <div className="mb-4">
+    <div className="form-group">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+        <label htmlFor={inputId} className="form-label">
           {label}
         </label>
       )}
       <input
+        id={inputId}
+        name={name}
         type={type}
         placeholder={placeholder}
         value={value}
         onChange={onChange}
-        className={`border border-gray-300 rounded-lg px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 ${error ? 'border-red-500 focus:ring-red-500' : ''} ${className}`}
+        className={`form-input${error ? ' error' : ''} ${className}`}
         {...props}
       />
-      {error && (
-        <p className="mt-1 text-sm text-red-600">{error}</p>
-      )}
+      {error && <p className="form-error">{error}</p>}
+      {hint && !error && <p className="form-hint">{hint}</p>}
     </div>
   );
 };

@@ -3,84 +3,64 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Navbar from '../../components/Navbar';
-import Button from '../../components/Button';
 import Input from '../../components/Input';
+
+const CATEGORIES = [
+  'Food & Dining','Transportation','Shopping','Entertainment',
+  'Bills & Utilities','Healthcare','Education','Travel','Other',
+];
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const CAT_ICON = {
+  'Food & Dining':'🍔','Transportation':'🚗','Shopping':'🛍️','Entertainment':'🎬',
+  'Bills & Utilities':'⚡','Healthcare':'🏥','Education':'📚','Travel':'✈️','Other':'📦',
+};
+
+const fmt = (v) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(v || 0);
 
 export default function Budgets() {
   const router = useRouter();
   const [budgets, setBudgets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [adding, setAdding] = useState(false);
   const [formData, setFormData] = useState({
     category: '',
     monthlyLimit: '',
     year: new Date().getFullYear(),
     month: new Date().getMonth() + 1,
   });
-  const [adding, setAdding] = useState(false);
 
-  const handleLogout = () => {
-    localStorage.removeItem('user');
-    router.push('/');
-  };
-
-  useEffect(() => {
-    loadBudgets();
-  }, []);
+  const handleLogout = () => { localStorage.removeItem('user'); router.push('/'); };
 
   const loadBudgets = async () => {
     try {
       const user = JSON.parse(localStorage.getItem('user'));
-      if (!user || !user.token) {
-        router.push('/auth/login');
-        return;
-      }
-
-      const response = await fetch('/api/budgets/all', {
-        headers: {
-          Authorization: `Bearer ${user.token}`,
-        },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setBudgets(data);
-      } else {
-        setError('Failed to fetch budgets');
-      }
-    } catch (error) {
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
-    }
+      if (!user?.token) { router.push('/auth/login'); return; }
+      const res = await fetch('/api/budgets/all', { headers: { Authorization: `Bearer ${user.token}` } });
+      if (res.ok) setBudgets(await res.json());
+      else setError('Failed to load budgets.');
+    } catch { setError('Network error.'); }
+    finally { setLoading(false); }
   };
 
-  const handleInputChange = (e) => {
+  useEffect(() => { loadBudgets(); }, []);
+
+  const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setAdding(true);
     setError('');
-
     try {
       const user = JSON.parse(localStorage.getItem('user'));
-      if (!user || !user.token) {
-        router.push('/auth/login');
-        return;
-      }
-
-      const response = await fetch('/api/budgets/add', {
+      if (!user?.token) { router.push('/auth/login'); return; }
+      const res = await fetch('/api/budgets/add', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${user.token}`,
-        },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${user.token}` },
         body: JSON.stringify({
           category: formData.category,
           monthlyLimit: parseFloat(formData.monthlyLimit),
@@ -88,161 +68,108 @@ export default function Budgets() {
           month: parseInt(formData.month),
         }),
       });
-
-      if (response.ok) {
+      if (res.ok) {
+        setFormData({ category: '', monthlyLimit: '', year: new Date().getFullYear(), month: new Date().getMonth() + 1 });
+        setShowForm(false);
         loadBudgets();
-        setFormData({
-          category: '',
-          monthlyLimit: '',
-          year: new Date().getFullYear(),
-          month: new Date().getMonth() + 1,
-        });
       } else {
-        const data = await response.json();
-        setError(data.message || 'Failed to add budget');
+        const d = await res.json();
+        setError(d.message || 'Failed to add budget.');
       }
-    } catch (error) {
-      setError('Network error. Please try again.');
-    } finally {
-      setAdding(false);
-    }
+    } catch { setError('Network error.'); }
+    finally { setAdding(false); }
   };
 
-  const categories = [
-    'Food & Dining',
-    'Transportation',
-    'Shopping',
-    'Entertainment',
-    'Bills & Utilities',
-    'Healthcare',
-    'Education',
-    'Travel',
-    'Other'
-  ];
-
-  const formatAmount = (amount) => {
-    return new Intl.NumberFormat('en-IN', {
-      style: 'currency',
-      currency: 'INR',
-    }).format(amount);
-  };
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <Navbar onLogout={handleLogout} />
-        <div className="container mx-auto px-4 py-8 max-w-4xl">
-          <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="text-gray-500 mt-4">Loading budgets...</p>
-          </div>
-        </div>
+  if (loading) return (
+    <div style={{ minHeight: '100vh', background: '#f9fafb' }}>
+      <Navbar onLogout={handleLogout} />
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 'calc(100vh - 60px)', flexDirection: 'column', gap: '0.75rem' }}>
+        <div className="spinner" /><p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Loading...</p>
       </div>
-    );
-  }
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={{ minHeight: '100vh', background: '#f9fafb' }}>
       <Navbar onLogout={handleLogout} />
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Budgets</h1>
-          <p className="text-gray-600">Set and manage your monthly spending limits.</p>
-        </div>
+      <div className="page-inner">
 
-        <div className="bg-white rounded-xl shadow-md border border-gray-100 p-6 mb-8">
-          <h2 className="text-xl font-semibold mb-4">Add New Budget</h2>
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
-                {error}
-              </div>
-            )}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                <select
-                  name="category"
-                  value={formData.category}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select category</option>
-                  {categories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-              <Input
-                label="Monthly Limit"
-                name="monthlyLimit"
-                type="number"
-                step="0.01"
-                value={formData.monthlyLimit}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Input
-                label="Year"
-                name="year"
-                type="number"
-                value={formData.year}
-                onChange={handleInputChange}
-                required
-              />
-              <Input
-                label="Month"
-                name="month"
-                type="number"
-                min="1"
-                max="12"
-                value={formData.month}
-                onChange={handleInputChange}
-                required
-              />
-            </div>
-            <Button type="submit" disabled={adding} className="w-full md:w-auto">
-              {adding ? 'Adding...' : 'Add Budget'}
-            </Button>
-          </form>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-md border border-gray-100">
-          <div className="p-6 border-b border-gray-200">
-            <h2 className="text-xl font-semibold">Your Budgets</h2>
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div>
+            <h1 style={{ fontSize: '1.4rem', fontWeight: 700, color: '#111827' }}>Budgets</h1>
+            <p style={{ fontSize: '0.875rem', color: '#6b7280', marginTop: '0.2rem' }}>Set monthly spending limits by category.</p>
           </div>
-          {budgets.length === 0 ? (
-            <div className="text-center py-12">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">No budgets set</h3>
-              <p className="text-gray-500">Add your first budget above.</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-200">
-              {budgets.map((budget) => (
-                <div key={budget._id} className="p-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h3 className="text-lg font-medium text-gray-900">
-                        {budget.category}
-                      </h3>
-                      <p className="text-sm text-gray-500">
-                        {budget.month}/{budget.year}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xl font-bold text-green-600">
-                        {formatAmount(budget.monthlyLimit)}
-                      </p>
-                    </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setShowForm(!showForm)}>
+            {showForm ? 'Cancel' : '+ New Budget'}
+          </button>
+        </div>
+
+        {error && <div className="alert alert-error">{error}</div>}
+
+        {/* Add form */}
+        {showForm && (
+          <div className="card" style={{ marginBottom: '1.25rem', borderColor: '#93c5fd' }}>
+            <div style={{ fontWeight: 600, fontSize: '0.9rem', color: '#111827', marginBottom: '1rem' }}>New Budget</div>
+            <form onSubmit={handleSubmit}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
+                <div className="form-group">
+                  <label className="form-label">Category</label>
+                  <select name="category" value={formData.category} onChange={handleChange} className="form-input" required>
+                    <option value="">Select</option>
+                    {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <Input label="Monthly Limit (₹)" name="monthlyLimit" type="number" step="0.01" placeholder="e.g. 5000"
+                  value={formData.monthlyLimit} onChange={handleChange} required />
+                <div className="form-group">
+                  <label className="form-label">Month</label>
+                  <select name="month" value={formData.month} onChange={handleChange} className="form-input" required>
+                    {MONTHS.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+                  </select>
+                </div>
+                <Input label="Year" name="year" type="number" value={formData.year} onChange={handleChange} required />
+              </div>
+              <button type="submit" disabled={adding} className="btn btn-primary btn-sm" style={{ marginTop: '0.5rem' }}>
+                {adding ? 'Saving...' : 'Save Budget'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Budget list */}
+        {budgets.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', padding: '3.5rem 1rem' }}>
+            <p style={{ color: '#9ca3af', fontSize: '0.875rem', marginBottom: '1rem' }}>
+              No budgets set yet. Create one to start tracking your spending limits.
+            </p>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}>+ Create Budget</button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1rem' }}>
+            {budgets.map(budget => (
+              <div key={budget._id} className="card">
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                  <div style={{
+                    width: '36px', height: '36px', borderRadius: '8px',
+                    background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem',
+                  }}>
+                    {CAT_ICON[budget.category] || '📦'}
+                  </div>
+                  <div>
+                    <div style={{ fontWeight: 600, fontSize: '0.875rem', color: '#111827' }}>{budget.category}</div>
+                    <div style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{MONTHS[budget.month - 1]} {budget.year}</div>
                   </div>
                 </div>
-              ))}
-            </div>
-          )}
-        </div>
+                <div style={{ fontSize: '1.35rem', fontWeight: 700, color: '#16a34a' }}>{fmt(budget.monthlyLimit)}</div>
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.2rem' }}>monthly limit</div>
+                <div className="progress">
+                  <div className="progress-bar green" style={{ width: '0%' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
